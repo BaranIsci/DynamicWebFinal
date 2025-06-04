@@ -29,6 +29,7 @@ router.get('/flights', flightController.getAllFlights);
 router.get('/flights/search', flightController.searchFlights);
 router.post('/flights', auth, flightController.createFlight);
 router.put('/flights/:id', auth, flightController.updateFlight);
+router.put('/flights/:id/seats', flightController.updateFlightSeats);
 router.delete('/flights/:id', auth, flightController.deleteFlight);
 
 // Ticket routes

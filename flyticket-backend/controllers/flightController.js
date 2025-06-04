@@ -274,6 +274,29 @@ const flightController = {
       console.error('Error deleting flight:', error);
       res.status(500).json({ message: 'Error deleting flight' });
     }
+  },
+
+  // Update flight seats (public)
+  updateFlightSeats: async (req, res) => {
+    try {
+      const flight = await Flight.findByPk(req.params.id);
+      if (!flight) {
+        return res.status(404).json({ message: 'Flight not found' });
+      }
+
+      const { seats_available } = req.body;
+      if (typeof seats_available !== 'number' || seats_available < 0 || seats_available > flight.seats_total) {
+        return res.status(400).json({ 
+          message: 'Invalid seats_available value. Must be a number between 0 and total seats.' 
+        });
+      }
+
+      await flight.update({ seats_available });
+      res.json(flight);
+    } catch (error) {
+      console.error('Error updating flight seats:', error);
+      res.status(400).json({ message: 'Error updating flight seats' });
+    }
   }
 };
 
