@@ -4,10 +4,25 @@ const adminController = require('../controllers/adminController');
 const flightController = require('../controllers/flightController');
 const ticketController = require('../controllers/ticketController');
 const auth = require('../middleware/auth');
+const { City } = require('../models');
 
 // Admin routes
-router.post('/admin/login', adminController.login);
-router.post('/admin/create', adminController.createAdmin);
+router.post('/auth/login', adminController.login);
+router.post('/admin/create', auth, adminController.createAdmin);
+
+// City routes
+router.get('/city', async (req, res) => {
+  try {
+    const cities = await City.findAll({
+      attributes: ['city_id', 'city_name'],
+      order: [['city_name', 'ASC']]
+    });
+    res.json(cities);
+  } catch (error) {
+    console.error('Error fetching cities:', error);
+    res.status(500).json({ message: 'Error fetching cities' });
+  }
+});
 
 // Flight routes
 router.get('/flights', flightController.getAllFlights);
@@ -17,8 +32,9 @@ router.put('/flights/:id', auth, flightController.updateFlight);
 router.delete('/flights/:id', auth, flightController.deleteFlight);
 
 // Ticket routes
-router.post('/tickets', ticketController.bookTicket);
-router.get('/tickets/email/:email', ticketController.getTicketsByEmail);
-router.get('/tickets', auth, ticketController.getAllTickets);
+router.get('/tickets', ticketController.getAllTickets);
+router.post('/tickets', ticketController.createTicket);
+router.put('/tickets/:id', ticketController.updateTicket);
+router.delete('/tickets/:id', ticketController.deleteTicket);
 
 module.exports = router; 

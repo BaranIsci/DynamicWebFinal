@@ -13,6 +13,7 @@ module.exports = (sequelize) => {
       allowNull: false
     }
   }, {
+    tableName: 'admins',
     timestamps: true,
     hooks: {
       beforeCreate: async (admin) => {

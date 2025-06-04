@@ -3,17 +3,25 @@ const { DataTypes } = require('sequelize');
 module.exports = (sequelize) => {
   const Flight = sequelize.define('Flight', {
     flight_id: {
-      type: DataTypes.STRING,
+      type: DataTypes.INTEGER,
       primaryKey: true,
-      allowNull: false
+      autoIncrement: true
     },
     from_city: {
-      type: DataTypes.STRING,
-      allowNull: false
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      references: {
+        model: 'city',
+        key: 'city_id'
+      }
     },
     to_city: {
-      type: DataTypes.STRING,
-      allowNull: false
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      references: {
+        model: 'city',
+        key: 'city_id'
+      }
     },
     departure_time: {
       type: DataTypes.DATE,
@@ -36,6 +44,7 @@ module.exports = (sequelize) => {
       allowNull: false
     }
   }, {
+    tableName: 'flights',
     timestamps: true
   });
   return Flight;
