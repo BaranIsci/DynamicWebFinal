@@ -1,52 +1,43 @@
-const { DataTypes } = require('sequelize');
+const mongoose = require('mongoose');
 
-module.exports = (sequelize) => {
-  const Ticket = sequelize.define('Ticket', {
-    ticket_id: {
-      type: DataTypes.INTEGER,
-      primaryKey: true,
-      autoIncrement: true
-    },
-    passenger_name: {
-      type: DataTypes.STRING,
-      allowNull: false
-    },
-    passenger_surname: {
-      type: DataTypes.STRING,
-      allowNull: false
-    },
-    passenger_email: {
-      type: DataTypes.STRING,
-      allowNull: false,
-      validate: {
-        isEmail: true
-      }
-    },
-    flight_id: {
-      type: DataTypes.INTEGER,
-      allowNull: false,
-      references: {
-        model: 'flights',
-        key: 'flight_id'
-      }
-    },
-    seat_number: {
-      type: DataTypes.STRING,
-      allowNull: true
-    },
-    booking_date: {
-      type: DataTypes.DATE,
-      allowNull: false,
-      defaultValue: DataTypes.NOW
-    },
-    status: {
-      type: DataTypes.ENUM('confirmed', 'cancelled', 'completed'),
-      allowNull: false,
-      defaultValue: 'confirmed'
+const ticketSchema = new mongoose.Schema({
+  passenger_name: {
+    type: String,
+    required: true
+  },
+  passenger_surname: {
+    type: String,
+    required: true
+  },
+  passenger_email: {
+    type: String,
+    required: true,
+    validate: {
+      validator: function(v) {
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+      },
+      message: props => `${props.value} is not a valid email!`
     }
-  }, {
-    tableName: 'tickets',
-    timestamps: true
-  });
-  return Ticket;
-}; 
+  },
+  flight_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Flight',
+    required: true
+  },
+  seat_number: {
+    type: String
+  },
+  booking_date: {
+    type: Date,
+    default: Date.now
+  },
+  status: {
+    type: String,
+    enum: ['confirmed', 'cancelled', 'completed'],
+    default: 'confirmed'
+  }
+}, {
+  timestamps: true
+});
+
+module.exports = mongoose.model('Ticket', ticketSchema); 

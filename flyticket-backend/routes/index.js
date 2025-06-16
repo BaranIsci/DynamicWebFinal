@@ -13,10 +13,7 @@ router.post('/admin/create', auth, adminController.createAdmin);
 // City routes
 router.get('/city', async (req, res) => {
   try {
-    const cities = await City.findAll({
-      attributes: ['city_id', 'city_name'],
-      order: [['city_name', 'ASC']]
-    });
+    const cities = await City.find().sort({ city_name: 1 });
     res.json(cities);
   } catch (error) {
     console.error('Error fetching cities:', error);
@@ -37,5 +34,6 @@ router.get('/tickets', ticketController.getAllTickets);
 router.post('/tickets', ticketController.createTicket);
 router.put('/tickets/:id', ticketController.updateTicket);
 router.delete('/tickets/:id', ticketController.deleteTicket);
+router.get('/tickets/flight/:flightId', ticketController.getTicketsByFlightId);
 
 module.exports = router; 

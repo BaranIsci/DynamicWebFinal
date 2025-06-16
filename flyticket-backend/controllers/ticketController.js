@@ -1,27 +1,12 @@
-const { Ticket, Flight, City } = require('../models');
-const { v4: uuidv4 } = require('uuid');
+const { Ticket, Flight } = require('../models');
+const mongoose = require('mongoose');
 
 const ticketController = {
   // Get all tickets
   getAllTickets: async (req, res) => {
     try {
-      const tickets = await Ticket.findAll({
-        include: [{
-          model: Flight,
-          include: [
-            {
-              model: City,
-              as: 'departureCity',
-              attributes: ['city_name']
-            },
-            {
-              model: City,
-              as: 'arrivalCity',
-              attributes: ['city_name']
-            }
-          ]
-        }]
-      });
+      const tickets = await Ticket.find()
+        .populate('flight_id');
       res.json(tickets);
     } catch (error) {
       console.error('Error fetching tickets:', error);
@@ -50,7 +35,7 @@ const ticketController = {
       }
 
       // Check if flight exists and has available seats
-      const flight = await Flight.findByPk(flight_id);
+      const flight = await Flight.findById(flight_id);
       if (!flight) {
         return res.status(404).json({ 
           message: 'Flight not found' 
@@ -64,7 +49,7 @@ const ticketController = {
       }
 
       // Create ticket
-      const ticket = await Ticket.create({
+      const ticket = new Ticket({
         passenger_name,
         passenger_surname,
         passenger_email,
@@ -72,19 +57,18 @@ const ticketController = {
         seat_number
       });
 
-      // Update available seats
-      await flight.update({
-        seats_available: flight.seats_available - 1
-      });
+      await ticket.save();
 
-      res.status(201).json(ticket);
+      // Update available seats
+      flight.seats_available -= 1;
+      await flight.save();
+
+      const createdTicket = await Ticket.findById(ticket._id)
+        .populate('flight_id');
+
+      res.status(201).json(createdTicket);
     } catch (error) {
       console.error('Error creating ticket:', error);
-      if (error.name === 'SequelizeValidationError') {
-        return res.status(400).json({ 
-          message: error.errors.map(err => err.message).join(', ') 
-        });
-      }
       res.status(400).json({ 
         message: 'Error creating ticket: ' + error.message 
       });
@@ -94,22 +78,22 @@ const ticketController = {
   // Update ticket
   updateTicket: async (req, res) => {
     try {
-      const ticket = await Ticket.findByPk(req.params.id);
+      const ticket = await Ticket.findById(req.params.id);
       if (!ticket) {
         return res.status(404).json({ 
           message: 'Ticket not found' 
         });
       }
 
-      await ticket.update(req.body);
-      res.json(ticket);
+      Object.assign(ticket, req.body);
+      await ticket.save();
+
+      const updatedTicket = await Ticket.findById(ticket._id)
+        .populate('flight_id');
+
+      res.json(updatedTicket);
     } catch (error) {
       console.error('Error updating ticket:', error);
-      if (error.name === 'SequelizeValidationError') {
-        return res.status(400).json({ 
-          message: error.errors.map(err => err.message).join(', ') 
-        });
-      }
       res.status(400).json({ 
         message: 'Error updating ticket: ' + error.message 
       });
@@ -119,7 +103,7 @@ const ticketController = {
   // Delete ticket
   deleteTicket: async (req, res) => {
     try {
-      const ticket = await Ticket.findByPk(req.params.id);
+      const ticket = await Ticket.findById(req.params.id);
       if (!ticket) {
         return res.status(404).json({ 
           message: 'Ticket not found' 
@@ -127,14 +111,13 @@ const ticketController = {
       }
 
       // Get the flight to update available seats
-      const flight = await Flight.findByPk(ticket.flight_id);
+      const flight = await Flight.findById(ticket.flight_id);
       if (flight) {
-        await flight.update({
-          seats_available: flight.seats_available + 1
-        });
+        flight.seats_available += 1;
+        await flight.save();
       }
 
-      await ticket.destroy();
+      await ticket.deleteOne();
       res.status(204).send();
     } catch (error) {
       console.error('Error deleting ticket:', error);
@@ -157,6 +140,40 @@ const ticketController = {
   // Get all tickets (admin only)
   getAllTickets: async (req, res) => {
     res.json({ message: 'Get all tickets endpoint' });
+  },
+
+  // Get tickets by flight ID
+  getTicketsByFlightId: async (req, res) => {
+    try {
+      const { flightId } = req.params;
+      console.log('Searching for tickets with flightId:', flightId);
+
+      // Ensure flightId is a valid MongoDB ObjectId
+      if (!mongoose.Types.ObjectId.isValid(flightId)) {
+        return res.status(400).json({ message: 'Invalid flight ID format' });
+      }
+
+      // Find tickets using MongoDB query
+      const tickets = await Ticket.find({ flight_id: flightId })
+        .populate({
+          path: 'flight_id',
+          select: 'from_city to_city departure_time arrival_time price'
+        });
+
+      console.log('Found tickets:', tickets);
+
+      if (!tickets || tickets.length === 0) {
+        return res.status(404).json({ message: 'No tickets found for this flight' });
+      }
+
+      res.json(tickets);
+    } catch (error) {
+      console.error('Error fetching tickets by flight ID:', error);
+      res.status(500).json({ 
+        message: 'Error fetching tickets by flight ID',
+        error: error.message 
+      });
+    }
   }
 };
 

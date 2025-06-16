@@ -1,17 +1,11 @@
-require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const { Sequelize } = require('sequelize');
 const routes = require('./routes');
+const connectDB = require('./db');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
-
-const sequelize = new Sequelize(process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/flyticket', {
-  dialect: 'postgres',
-  logging: false
-});
 
 // Health check endpoint
 app.get('/', (req, res) => {
@@ -23,10 +17,12 @@ app.use('/api', routes);
 
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  // Test database connection
-  sequelize.authenticate()
-    .then(() => console.log('Database connection has been established successfully.'))
-    .catch(err => console.error('Unable to connect to the database:', err));
+// Connect to MongoDB and start server
+connectDB().then(() => {
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}).catch(err => {
+  console.error('Failed to start server:', err);
+  process.exit(1);
 });

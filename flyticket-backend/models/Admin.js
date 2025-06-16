@@ -1,40 +1,32 @@
-const { DataTypes } = require('sequelize');
+const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
-module.exports = (sequelize) => {
-  const Admin = sequelize.define('Admin', {
-    username: {
-      type: DataTypes.STRING,
-      allowNull: false,
-      unique: true
-    },
-    password: {
-      type: DataTypes.STRING,
-      allowNull: false
-    }
-  }, {
-    tableName: 'admins',
-    timestamps: true,
-    hooks: {
-      beforeCreate: async (admin) => {
-        if (admin.password) {
-          const salt = await bcrypt.genSalt(10);
-          admin.password = await bcrypt.hash(admin.password, salt);
-        }
-      },
-      beforeUpdate: async (admin) => {
-        if (admin.changed('password')) {
-          const salt = await bcrypt.genSalt(10);
-          admin.password = await bcrypt.hash(admin.password, salt);
-        }
-      }
-    }
-  });
+const adminSchema = new mongoose.Schema({
+  username: {
+    type: String,
+    required: true,
+    unique: true
+  },
+  password: {
+    type: String,
+    required: true
+  }
+}, {
+  timestamps: true
+});
 
-  // Instance method to check password
-  Admin.prototype.validatePassword = async function(password) {
-    return await bcrypt.compare(password, this.password);
-  };
+// Hash password before saving
+adminSchema.pre('save', async function(next) {
+  if (this.isModified('password')) {
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+  }
+  next();
+});
 
-  return Admin;
-}; 
+// Method to validate password
+adminSchema.methods.validatePassword = async function(password) {
+  return await bcrypt.compare(password, this.password);
+};
+
+module.exports = mongoose.model('Admin', adminSchema); 

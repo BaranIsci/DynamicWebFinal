@@ -7,7 +7,7 @@ const adminController = {
       const { username, password } = req.body;
 
       // Find admin by username
-      const admin = await Admin.findOne({ where: { username } });
+      const admin = await Admin.findOne({ username });
       if (!admin) {
         return res.status(401).json({ message: 'Invalid username or password' });
       }
@@ -20,7 +20,7 @@ const adminController = {
 
       // Generate JWT token
       const token = jwt.sign(
-        { id: admin.id, username: admin.username },
+        { id: admin._id, username: admin.username },
         process.env.JWT_SECRET || 'your-secret-key',
         { expiresIn: '24h' }
       );

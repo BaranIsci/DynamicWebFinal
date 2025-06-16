@@ -1,24 +1,13 @@
 const { Flight, City } = require('../models');
-const { Op } = require('sequelize');
+const mongoose = require('mongoose');
 
 const flightController = {
   // Get all flights
   getAllFlights: async (req, res) => {
     try {
-      const flights = await Flight.findAll({
-        include: [
-          {
-            model: City,
-            as: 'departureCity',
-            attributes: ['city_id', 'city_name']
-          },
-          {
-            model: City,
-            as: 'arrivalCity',
-            attributes: ['city_id', 'city_name']
-          }
-        ]
-      });
+      const flights = await Flight.find()
+        .populate('from_city', 'city_name')
+        .populate('to_city', 'city_name');
       res.json(flights);
     } catch (error) {
       console.error('Error fetching flights:', error);
@@ -29,10 +18,7 @@ const flightController = {
   // Get all cities for dropdown
   getCities: async (req, res) => {
     try {
-      const cities = await City.findAll({
-        attributes: ['city_id', 'city_name'],
-        order: [['city_name', 'ASC']]
-      });
+      const cities = await City.find().sort({ city_name: 1 });
       res.json(cities);
     } catch (error) {
       console.error('Error fetching cities:', error);
@@ -43,44 +29,52 @@ const flightController = {
   // Search flights
   searchFlights: async (req, res) => {
     try {
-      const { from_city, to_city, date } = req.query;
+      const { from_city, to_city, departure_date, arrival_date } = req.query;
       
-      // Build where clause based on provided parameters
-      const whereClause = {};
+      // Build query based on provided parameters
+      const query = {};
       
       if (from_city) {
-        whereClause.from_city = parseInt(from_city);
+        const fromCity = await City.findOne({ city_name: from_city });
+        if (fromCity) {
+          query.from_city = fromCity._id;
+        }
       }
       
       if (to_city) {
-        whereClause.to_city = parseInt(to_city);
+        const toCity = await City.findOne({ city_name: to_city });
+        if (toCity) {
+          query.to_city = toCity._id;
+        }
       }
       
-      if (date) {
-        const startDate = new Date(date);
-        const endDate = new Date(date);
+      if (departure_date) {
+        const startDate = new Date(departure_date);
+        startDate.setHours(0, 0, 0, 0);
+        const endDate = new Date(startDate);
         endDate.setDate(endDate.getDate() + 1);
         
-        whereClause.departure_time = {
-          [Op.between]: [startDate, endDate]
+        query.departure_time = {
+          $gte: startDate,
+          $lt: endDate
+        };
+      }
+      
+      if (arrival_date) {
+        const startDate = new Date(arrival_date);
+        startDate.setHours(0, 0, 0, 0);
+        const endDate = new Date(startDate);
+        endDate.setDate(endDate.getDate() + 1);
+        
+        query.arrival_time = {
+          $gte: startDate,
+          $lt: endDate
         };
       }
 
-      const flights = await Flight.findAll({
-        where: whereClause,
-        include: [
-          {
-            model: City,
-            as: 'departureCity',
-            attributes: ['city_id', 'city_name']
-          },
-          {
-            model: City,
-            as: 'arrivalCity',
-            attributes: ['city_id', 'city_name']
-          }
-        ]
-      });
+      const flights = await Flight.find(query)
+        .populate('from_city', 'city_name')
+        .populate('to_city', 'city_name');
       
       res.json(flights);
     } catch (error) {
@@ -106,8 +100,8 @@ const flightController = {
       }
 
       // Validate city existence
-      const fromCity = await City.findOne({ where: { city_id: req.body.from_city } });
-      const toCity = await City.findOne({ where: { city_id: req.body.to_city } });
+      const fromCity = await City.findById(req.body.from_city);
+      const toCity = await City.findById(req.body.to_city);
 
       if (!fromCity) {
         return res.status(400).json({ 
@@ -121,7 +115,7 @@ const flightController = {
         });
       }
 
-      if (fromCity.city_id === toCity.city_id) {
+      if (fromCity._id.toString() === toCity._id.toString()) {
         return res.status(400).json({ 
           message: 'Departure and arrival cities cannot be the same' 
         });
@@ -191,41 +185,49 @@ const flightController = {
         });
       }
 
+      // Before creating the flight, check for duplicate departure
+      const existingDepartureFlight = await Flight.findOne({
+        from_city: fromCity._id,
+        departure_time: departureTime
+      });
+      if (existingDepartureFlight) {
+        return res.status(400).json({
+          message: 'A flight with the same departure city and time already exists.'
+        });
+      }
+
+      // Check for duplicate arrival
+      const existingArrivalFlight = await Flight.findOne({
+        to_city: toCity._id,
+        arrival_time: arrivalTime
+      });
+      if (existingArrivalFlight) {
+        return res.status(400).json({
+          message: 'A flight with the same arrival city and time already exists.'
+        });
+      }
+
       // Create flight with converted values
-      const flight = await Flight.create({
-        from_city: fromCity.city_id,
-        to_city: toCity.city_id,
+      const flight = new Flight({
+        from_city: fromCity._id,
+        to_city: toCity._id,
         departure_time: departureTime,
         arrival_time: arrivalTime,
         price,
         seats_total: seatsTotal,
         seats_available: seatsAvailable
       });
+
+      await flight.save();
       
       // Fetch the created flight with city information
-      const createdFlight = await Flight.findByPk(flight.flight_id, {
-        include: [
-          {
-            model: City,
-            as: 'departureCity',
-            attributes: ['city_id', 'city_name']
-          },
-          {
-            model: City,
-            as: 'arrivalCity',
-            attributes: ['city_id', 'city_name']
-          }
-        ]
-      });
+      const createdFlight = await Flight.findById(flight._id)
+        .populate('from_city', 'city_name')
+        .populate('to_city', 'city_name');
       
       res.status(201).json(createdFlight);
     } catch (error) {
       console.error('Error creating flight:', error);
-      if (error.name === 'SequelizeValidationError') {
-        return res.status(400).json({ 
-          message: error.errors.map(err => err.message).join(', ') 
-        });
-      }
       res.status(400).json({ 
         message: 'Error creating flight: ' + error.message 
       });
@@ -235,40 +237,71 @@ const flightController = {
   // Update flight (admin only)
   updateFlight: async (req, res) => {
     try {
-      const flight = await Flight.findByPk(req.params.id);
+      const flight = await Flight.findById(req.params.id);
       if (!flight) {
         return res.status(404).json({ message: 'Flight not found' });
       }
 
       // Validate city existence if cities are being updated
       if (req.body.from_city || req.body.to_city) {
-        const fromCity = req.body.from_city ? await City.findByPk(req.body.from_city) : null;
-        const toCity = req.body.to_city ? await City.findByPk(req.body.to_city) : null;
+        const fromCity = req.body.from_city ? await City.findById(req.body.from_city) : null;
+        const toCity = req.body.to_city ? await City.findById(req.body.to_city) : null;
 
         if ((req.body.from_city && !fromCity) || (req.body.to_city && !toCity)) {
           return res.status(400).json({ message: 'Invalid city ID' });
         }
       }
 
-      await flight.update(req.body);
-      res.json(flight);
+      // Before updating the flight, check for duplicate departure
+      const excludeId = new mongoose.Types.ObjectId(req.params.id);
+      const normalizedDeparture = normalizeDateToMinute(req.body.departure_time);
+      const normalizedArrival = normalizeDateToMinute(req.body.arrival_time);
+
+      const existingDepartureFlight = await Flight.findOne({
+        from_city: req.body.from_city,
+        departure_time: normalizedDeparture,
+        _id: { $ne: excludeId }
+      });
+      if (existingDepartureFlight) {
+        return res.status(400).json({
+          message: 'A flight with the same departure city and time already exists.'
+        });
+      }
+
+      // Check for duplicate arrival
+      const existingArrivalFlight = await Flight.findOne({
+        to_city: req.body.to_city,
+        arrival_time: normalizedArrival,
+        _id: { $ne: excludeId }
+      });
+      if (existingArrivalFlight) {
+        return res.status(400).json({
+          message: 'A flight with the same arrival city and time already exists.'
+        });
+      }
+
+      Object.assign(flight, req.body);
+      await flight.save();
+      
+      const updatedFlight = await Flight.findById(flight._id)
+        .populate('from_city', 'city_name')
+        .populate('to_city', 'city_name');
+        
+      res.json(updatedFlight);
     } catch (error) {
       console.error('Error updating flight:', error);
-      if (error.name === 'SequelizeValidationError') {
-        return res.status(400).json({ message: error.errors[0].message });
-      }
-      res.status(400).json({ message: 'Error updating flight' });
+      res.status(400).json({ message: 'Error updating flight: ' + error.message });
     }
   },
 
   // Delete flight (admin only)
   deleteFlight: async (req, res) => {
     try {
-      const flight = await Flight.findByPk(req.params.id);
+      const flight = await Flight.findById(req.params.id);
       if (!flight) {
         return res.status(404).json({ message: 'Flight not found' });
       }
-      await flight.destroy();
+      await flight.deleteOne();
       res.status(204).send();
     } catch (error) {
       console.error('Error deleting flight:', error);
@@ -279,7 +312,7 @@ const flightController = {
   // Update flight seats (public)
   updateFlightSeats: async (req, res) => {
     try {
-      const flight = await Flight.findByPk(req.params.id);
+      const flight = await Flight.findById(req.params.id);
       if (!flight) {
         return res.status(404).json({ message: 'Flight not found' });
       }
@@ -291,13 +324,25 @@ const flightController = {
         });
       }
 
-      await flight.update({ seats_available });
-      res.json(flight);
+      flight.seats_available = seats_available;
+      await flight.save();
+      
+      const updatedFlight = await Flight.findById(flight._id)
+        .populate('from_city', 'city_name')
+        .populate('to_city', 'city_name');
+        
+      res.json(updatedFlight);
     } catch (error) {
       console.error('Error updating flight seats:', error);
       res.status(400).json({ message: 'Error updating flight seats' });
     }
   }
 };
+
+function normalizeDateToMinute(date) {
+  const d = new Date(date);
+  d.setSeconds(0, 0);
+  return d;
+}
 
 module.exports = flightController; 
